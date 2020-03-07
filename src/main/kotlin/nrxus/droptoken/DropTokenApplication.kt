@@ -7,5 +7,5 @@ import org.springframework.boot.runApplication
 class DropTokenApplication
 
 fun main(args: Array<String>) {
-	runApplication<DropTokenApplication>(*args)
+    runApplication<DropTokenApplication>(*args)
 }

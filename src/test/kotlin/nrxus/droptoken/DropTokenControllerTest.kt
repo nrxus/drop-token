@@ -76,4 +76,55 @@ internal class DropTokenControllerTest(@Autowired val mockMvc: MockMvc) {
         JSONAssert.assertEquals(expected, response, JSONCompareMode.NON_EXTENSIBLE)
         verify(exactly = 1) { repository.save<DropToken>(any()) }
     }
+
+    @Test
+    fun `POST fields with invalid data`() {
+        val body = """{
+            |"players": ["player1"],
+            |"columns": 4,
+            |"rows":4
+            |}""".trimMargin()
+
+
+        val dropToken = DropToken(2)
+        every {
+            repository.save(any<DropToken>())
+        } returns dropToken
+
+        mockMvc
+                .perform(
+                        post("/drop_token")
+                                .accept(MediaType.APPLICATION_JSON)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
+                )
+                .andExpect(status().isBadRequest)
+
+        verify(exactly = 0) { repository.save<DropToken>(any()) }
+    }
+
+    @Test
+    fun `POST missing fields`() {
+        val body = """{
+            |"players": ["player1", "player2"]
+            |}""".trimMargin()
+
+
+        val dropToken = DropToken(2)
+        every {
+            repository.save(any<DropToken>())
+        } returns dropToken
+
+        mockMvc
+                .perform(
+                        post("/drop_token")
+                                .accept(MediaType.APPLICATION_JSON)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
+                )
+                .andExpect(status().isBadRequest)
+                .andReturn().response.contentAsString
+
+        verify(exactly = 0) { repository.save<DropToken>(any()) }
+    }
 }
