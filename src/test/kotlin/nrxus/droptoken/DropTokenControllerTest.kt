@@ -1,6 +1,7 @@
 package nrxus.droptoken
 
 import com.ninjasquad.springmockk.MockkBean
+import io.mockk.Called
 import io.mockk.every
 import io.mockk.verify
 import org.junit.jupiter.api.Test
@@ -8,7 +9,6 @@ import org.skyscreamer.jsonassert.JSONAssert
 import org.skyscreamer.jsonassert.JSONCompareMode
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest
-import org.springframework.data.repository.findByIdOrNull
 import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
@@ -19,18 +19,12 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 @WebMvcTest
 internal class DropTokenControllerTest(@Autowired val mockMvc: MockMvc) {
     @MockkBean
-    private lateinit var repository: DropTokenRepository
+    private lateinit var service: DropTokenService
 
     @Test
     fun `GET #drop_token`() {
-        val dropTokens = listOf(
-                DropToken(id = 3, player1 = "a", player2 = "b", state = DropToken.State.IN_PROGRESS),
-                DropToken(id = 5, player1 = "c", player2 = "d", state = DropToken.State.DONE)
-        )
-
-        every {
-            repository.findAll()
-        } returns dropTokens
+        val ids = listOf(2L, 4L)
+        every { service.allIds() } returns ids
 
         val response = mockMvc.perform(get("/drop_token")
                 .accept(MediaType.APPLICATION_JSON))
@@ -41,7 +35,7 @@ internal class DropTokenControllerTest(@Autowired val mockMvc: MockMvc) {
                 .contentAsString
 
         val actual = """{
-            |games: ["${dropTokens[0].id}", "${dropTokens[1].id}"]
+            |games: ["${ids[0]}", "${ids[1]}"]
             |}""".trimMargin()
 
         JSONAssert.assertEquals(actual, response, JSONCompareMode.NON_EXTENSIBLE)
@@ -56,12 +50,8 @@ internal class DropTokenControllerTest(@Autowired val mockMvc: MockMvc) {
             |}""".trimMargin()
 
 
-        val dropToken = DropToken(
-                id = 2, player1 = "player1", player2 = "player2", state = DropToken.State.IN_PROGRESS
-        )
-        every {
-            repository.save(any<DropToken>())
-        } returns dropToken
+        val id = 3L
+        every { service.create(any(), any()) } returns id
 
         val response = mockMvc
                 .perform(
@@ -77,15 +67,11 @@ internal class DropTokenControllerTest(@Autowired val mockMvc: MockMvc) {
                 .contentAsString
 
         val expected = """{
-            |"gameId": "${dropToken.id}"
+            |"gameId": "$id"
             |}""".trimMargin()
 
         JSONAssert.assertEquals(expected, response, JSONCompareMode.NON_EXTENSIBLE)
-        verify(exactly = 1) {
-            repository.save<DropToken>(match {
-                it.player1 == "player1" && it.player2 == "player2" && it.state == DropToken.State.IN_PROGRESS
-            })
-        }
+        verify(exactly = 1) { service.create("player1", "player2") }
     }
 
     @Test
@@ -105,7 +91,7 @@ internal class DropTokenControllerTest(@Autowired val mockMvc: MockMvc) {
                 )
                 .andExpect(status().isBadRequest)
 
-        verify(exactly = 0) { repository.save<DropToken>(any()) }
+        verify { service wasNot Called }
     }
 
     @Test
@@ -123,21 +109,15 @@ internal class DropTokenControllerTest(@Autowired val mockMvc: MockMvc) {
                 )
                 .andExpect(status().isBadRequest)
 
-        verify(exactly = 0) { repository.save<DropToken>(any()) }
+        verify { service wasNot Called }
     }
 
     @Test
     fun `GET #drop_token#{gameId}`() {
-        val dropToken = DropToken(
-                id = 3,
-                player1 = "alice",
-                player2 = "bob",
-                state = DropToken.State.DONE,
-                winner = "bob"
+        every { service.get(3) } returns GameState(
+                players = listOf("alice", "bob"),
+                state = GameState.State.Done(winner = "alice")
         )
-        every {
-            repository.findByIdOrNull(3)
-        } returns dropToken
 
         val response = mockMvc.perform(get("/drop_token/3")
                 .accept(MediaType.APPLICATION_JSON))
@@ -150,7 +130,7 @@ internal class DropTokenControllerTest(@Autowired val mockMvc: MockMvc) {
         val actual = """{
             |"players": ["alice", "bob"],
             |"state": "DONE",
-            |"winner": "bob"
+            |"winner": "alice"
             |}""".trimMargin()
 
         JSONAssert.assertEquals(actual, response, JSONCompareMode.NON_EXTENSIBLE)
@@ -158,9 +138,7 @@ internal class DropTokenControllerTest(@Autowired val mockMvc: MockMvc) {
 
     @Test
     fun `GET #drop_token#{gameId} not found`() {
-        every {
-            repository.findByIdOrNull(any())
-        } returns null
+        every { service.get(any()) } returns null
 
         mockMvc.perform(get("/drop_token/2")
                 .accept(MediaType.APPLICATION_JSON))

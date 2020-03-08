@@ -2,7 +2,7 @@ package nrxus.droptoken
 
 import com.fasterxml.jackson.annotation.JsonUnwrapped
 
-class GameResponse(
+class GameState(
         val players: List<String>,
         @field:JsonUnwrapped
         val state: State

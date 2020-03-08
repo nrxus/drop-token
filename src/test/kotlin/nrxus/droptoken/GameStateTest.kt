@@ -5,12 +5,12 @@ import org.junit.jupiter.api.Test
 import org.skyscreamer.jsonassert.JSONAssert
 import org.skyscreamer.jsonassert.JSONCompareMode
 
-internal class GameResponseTest {
+internal class GameStateTest {
     @Test
     fun `in progress`() {
-        val response = GameResponse(
+        val response = GameState(
                 players = listOf("bob", "alice"),
-                state = GameResponse.State.InProgress()
+                state = GameState.State.InProgress()
         )
 
         val serialized = ObjectMapper().writeValueAsString(response)
@@ -24,9 +24,9 @@ internal class GameResponseTest {
 
     @Test
     fun `done without a winner`() {
-        val response = GameResponse(
+        val response = GameState(
                 players = listOf("bob", "alice"),
-                state = GameResponse.State.Done(winner = null)
+                state = GameState.State.Done(winner = null)
         )
 
         val serialized = ObjectMapper().writeValueAsString(response)
@@ -41,9 +41,9 @@ internal class GameResponseTest {
 
     @Test
     fun `done with a winner`() {
-        val response = GameResponse(
+        val response = GameState(
                 players = listOf("bob", "alice"),
-                state = GameResponse.State.Done(winner = "alice")
+                state = GameState.State.Done(winner = "alice")
         )
 
         val serialized = ObjectMapper().writeValueAsString(response)
