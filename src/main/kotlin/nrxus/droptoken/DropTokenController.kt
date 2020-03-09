@@ -16,9 +16,35 @@ class DropTokenController(private val service: DropTokenService) {
     )
 
     @PostMapping
-    fun newGame(@Valid @RequestBody request: NewGameRequest) = NewGameResponse(
-            service.create(request.players).toString()
-    )
+    fun newGame(@Valid @RequestBody request: NewGameRequest): ResponseEntity<ApiResult<NewGameResponse>> {
+        return when {
+            request.players.any { s -> s.isBlank() } -> {
+                ResponseEntity.badRequest().body(ApiResult.Failure(
+                        ApiError(HttpStatus.BAD_REQUEST,
+                                message = "validation error",
+                                errors = listOf(ApiError.SubError(
+                                        field = "players",
+                                        message = "player names cannot be empty"
+                                )))
+                ))
+            }
+            request.players.distinct().size != request.players.size -> {
+                ResponseEntity.badRequest().body(ApiResult.Failure(
+                        ApiError(HttpStatus.BAD_REQUEST,
+                                message = "validation error",
+                                errors = listOf(ApiError.SubError(
+                                        field = "players",
+                                        message = "players must all have different names"
+                                )))
+                ))
+            }
+            else -> {
+                ResponseEntity.ok(ApiResult.Success(
+                        NewGameResponse(service.create(request.players).toString())
+                ))
+            }
+        }
+    }
 
     @GetMapping("/{id}")
     fun getGame(@PathVariable id: Long): ResponseEntity<GameState> = service.get(id)?.let { ResponseEntity.ok(it) }
@@ -60,7 +86,14 @@ class DropTokenController(private val service: DropTokenService) {
         val safeStart = start ?: 0
         if (safeStart < 0) {
             return ResponseEntity.badRequest().body(ApiResult.Failure(
-                    ApiError(HttpStatus.BAD_REQUEST, message = "start cannot be less than 0")
+                    ApiError(
+                            HttpStatus.BAD_REQUEST,
+                            message = "validation error",
+                            errors = listOf(ApiError.SubError(
+                                    field = "start",
+                                    message = "cannot be lower than 0"
+                            ))
+                    )
             ))
         }
 
@@ -68,7 +101,14 @@ class DropTokenController(private val service: DropTokenService) {
             null -> null
             else -> if (until < safeStart) {
                 return ResponseEntity.badRequest().body(ApiResult.Failure(
-                        ApiError(HttpStatus.BAD_REQUEST, message = "until cannot be less than $safeStart")
+                        ApiError(
+                                HttpStatus.BAD_REQUEST,
+                                message = "validation error",
+                                errors = listOf(ApiError.SubError(
+                                        field = "until",
+                                        message = "cannot be lower than $safeStart"
+                                ))
+                        )
                 ))
             } else {
                 until
@@ -83,7 +123,7 @@ class DropTokenController(private val service: DropTokenService) {
 
     @DeleteMapping("/{id}/{player}")
     fun delete(@PathVariable id: Long, @PathVariable player: String): ResponseEntity<Unit> =
-            when(service.delete(id, player)) {
+            when (service.delete(id, player)) {
                 is DeleteResult.NotFound -> ResponseEntity.notFound().build()
                 is DeleteResult.AlreadyDone -> ResponseEntity.status(HttpStatus.GONE).build()
                 is DeleteResult.Success -> ResponseEntity.accepted().build()
