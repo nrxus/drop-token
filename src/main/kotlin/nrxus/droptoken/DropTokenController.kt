@@ -81,6 +81,14 @@ class DropTokenController(private val service: DropTokenService) {
         return response ?: ResponseEntity.notFound().build()
     }
 
+    @DeleteMapping("/{id}/{player}")
+    fun delete(@PathVariable id: Long, @PathVariable player: String): ResponseEntity<Unit> =
+            when(service.delete(id, player)) {
+                is DeleteResult.NotFound -> ResponseEntity.notFound().build()
+                is DeleteResult.AlreadyDone -> ResponseEntity.status(HttpStatus.GONE).build()
+                is DeleteResult.Success -> ResponseEntity.accepted().build()
+            }
+
     // Simple Responses
 
     class AllGamesResponse(val games: List<String>)

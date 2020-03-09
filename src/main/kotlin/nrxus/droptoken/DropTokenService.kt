@@ -100,6 +100,41 @@ class DropTokenService(
 
                 it.moves.slice(start..end).map { move -> Move.fromEntity(move) }
             }
+
+    fun delete(id: Long, playerToDelete: String): DeleteResult = dropTokenRepository.findByIdOrNull(id)
+            ?.let {
+                if (it.state == DropToken.State.DONE) {
+                    return DeleteResult.AlreadyDone
+                }
+
+                val index = it.currentPlayers.withIndex()
+                        .find { (_, player) -> player == playerToDelete }
+                        ?.index
+
+                if (index == null) {
+                    DeleteResult.NotFound
+                } else {
+                    //delete
+                    it.currentPlayers.removeAt(index)
+
+                    // shift the turn
+                    it.turn = if (index > it.turn) {
+                        it.turn - 1
+                    } else {
+                        it.turn % it.currentPlayers.size
+                    }
+
+                    // check if there is only one player remaining
+                    if (it.currentPlayers.size == 1) {
+                        it.state = DropToken.State.DONE
+                        it.winner = it.currentPlayers[0]
+                    }
+
+                    dropTokenRepository.save(it)
+
+                    DeleteResult.Success
+                }
+            } ?: DeleteResult.NotFound
 }
 
 sealed class MoveResult {
@@ -107,4 +142,10 @@ sealed class MoveResult {
     object IllegalMove : MoveResult()
     object OutOfTurn : MoveResult()
     object None : MoveResult()
+}
+
+sealed class DeleteResult {
+    object Success : DeleteResult()
+    object AlreadyDone : DeleteResult()
+    object NotFound : DeleteResult()
 }
