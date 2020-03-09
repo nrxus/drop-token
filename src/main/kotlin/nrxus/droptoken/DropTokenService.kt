@@ -85,11 +85,20 @@ class DropTokenService(
     }
 
     fun getMove(id: Long, move: Int): Move? = moveRepository
-            .findByNumberAndDropTokenId(move, id)?.let {
-                Move(player = it.player, type = when (it.type) {
-                    nrxus.droptoken.persistence.Move.MoveType.QUIT -> Move.Type.Quit()
-                    nrxus.droptoken.persistence.Move.MoveType.MOVE -> Move.Type.Move(it.column!!)
-                })
+            .findByNumberAndDropTokenId(move, id)?.let { Move.fromEntity(it) }
+
+    fun getMoves(id: Long, start: Int, until: Int?): List<Move>? = dropTokenRepository.findByIdOrNull(id)
+            ?.let {
+                if (start >= it.moves.size) {
+                    return null
+                }
+
+                val end = until ?: it.moves.size - 1
+                if (end >= it.moves.size) {
+                    return null
+                }
+
+                it.moves.slice(start..end).map { move -> Move.fromEntity(move) }
             }
 }
 

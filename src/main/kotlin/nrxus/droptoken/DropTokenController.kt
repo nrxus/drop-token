@@ -5,6 +5,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 import javax.validation.Valid
+import javax.validation.constraints.Min
 
 @RestController
 @RequestMapping("/drop_token")
@@ -28,17 +29,17 @@ class DropTokenController(private val service: DropTokenService) {
             @PathVariable id: Long,
             @PathVariable player: String,
             @RequestBody request: MoveRequest
-    ): ResponseEntity<NewMoveResponse> = when (val result = service.newMove(id, player, request.column)) {
+    ): ResponseEntity<ApiResult<NewMoveResponse>> = when (val result = service.newMove(id, player, request.column)) {
         is MoveResult.Success -> ResponseEntity.ok(
-                NewMoveResponse.Success("$id/moves/${result.moveNumber}")
+                ApiResult.Success(NewMoveResponse("$id/moves/${result.moveNumber}"))
         )
         is MoveResult.None -> ResponseEntity.notFound().build()
         is MoveResult.IllegalMove -> ResponseEntity.badRequest()
-                .body(NewMoveResponse.Failure(
+                .body(ApiResult.Failure(
                         ApiError(HttpStatus.BAD_REQUEST, message = "Illegal Move")
                 ))
         is MoveResult.OutOfTurn -> ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(NewMoveResponse.Failure(
+                .body(ApiResult.Failure(
                         ApiError(HttpStatus.CONFLICT, message = "It is not $player's turn")
                 ))
     }
@@ -46,20 +47,53 @@ class DropTokenController(private val service: DropTokenService) {
     @GetMapping("/{id}/moves/{moveNumber}")
     fun getMove(
             @PathVariable id: Long,
-            @PathVariable moveNumber: Int
+            @PathVariable @Min(0) moveNumber: Int
     ): ResponseEntity<Move> = service.getMove(id, moveNumber)?.let { ResponseEntity.ok(it) }
             ?: ResponseEntity.notFound().build()
+
+    @GetMapping("/{id}/moves")
+    fun getMoves(
+            @PathVariable id: Long,
+            @RequestParam start: Int?,
+            @RequestParam until: Int?
+    ): ResponseEntity<ApiResult<MovesResponse>> {
+        val safeStart = start ?: 0
+        if (safeStart < 0) {
+            return ResponseEntity.badRequest().body(ApiResult.Failure(
+                    ApiError(HttpStatus.BAD_REQUEST, message = "start cannot be less than 0")
+            ))
+        }
+
+        val safeUntil = when (until) {
+            null -> null
+            else -> if (until < safeStart) {
+                return ResponseEntity.badRequest().body(ApiResult.Failure(
+                        ApiError(HttpStatus.BAD_REQUEST, message = "until cannot be less than $safeStart")
+                ))
+            } else {
+                until
+            }
+        }
+
+        val response: ResponseEntity<ApiResult<MovesResponse>>? = service.getMoves(id, safeStart, safeUntil)
+                ?.let { ResponseEntity.ok(ApiResult.Success(MovesResponse(it))) }
+
+        return response ?: ResponseEntity.notFound().build()
+    }
 
     // Simple Responses
 
     class AllGamesResponse(val games: List<String>)
     class NewGameResponse(val gameId: String)
-    sealed class NewMoveResponse {
-        class Success(val move: String) : NewMoveResponse()
-        class Failure(@JsonUnwrapped val error: ApiError) : NewMoveResponse()
-    }
+    class NewMoveResponse(val move: String)
+    class MovesResponse(val moves: List<Move>)
 
     // Simple Requests
 
     class MoveRequest(val column: Int)
+
+    sealed class ApiResult<T> {
+        class Success<T>(@JsonUnwrapped val success: T) : ApiResult<T>()
+        class Failure<T>(@JsonUnwrapped val error: ApiError) : ApiResult<T>()
+    }
 }
