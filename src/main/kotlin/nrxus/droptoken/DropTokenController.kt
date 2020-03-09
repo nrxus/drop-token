@@ -28,7 +28,7 @@ class DropTokenController(private val service: DropTokenService) {
             @PathVariable id: Long,
             @PathVariable player: String,
             @RequestBody request: MoveRequest
-    ): ResponseEntity<NewMoveResponse> = when (val result = service.move(id, player, request.column)) {
+    ): ResponseEntity<NewMoveResponse> = when (val result = service.newMove(id, player, request.column)) {
         is MoveResult.Success -> ResponseEntity.ok(
                 NewMoveResponse.Success("$id/moves/${result.moveNumber}")
         )
@@ -42,6 +42,13 @@ class DropTokenController(private val service: DropTokenService) {
                         ApiError(HttpStatus.CONFLICT, message = "It is not $player's turn")
                 ))
     }
+
+    @GetMapping("/{id}/moves/{moveNumber}")
+    fun getMove(
+            @PathVariable id: Long,
+            @PathVariable moveNumber: Int
+    ): ResponseEntity<Move> = service.getMove(id, moveNumber)?.let { ResponseEntity.ok(it) }
+            ?: ResponseEntity.notFound().build()
 
     // Simple Responses
 

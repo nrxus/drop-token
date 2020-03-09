@@ -2,17 +2,20 @@ package nrxus.droptoken
 
 import nrxus.droptoken.persistence.DropToken
 import nrxus.droptoken.persistence.DropTokenRepository
-import nrxus.droptoken.persistence.Move
+import nrxus.droptoken.persistence.MoveRepository
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.stereotype.Service
 
 @Service
-class DropTokenService(private val repository: DropTokenRepository) {
-    fun allIds(): List<Long> = repository.findAll().map { it.id }
+class DropTokenService(
+        private val dropTokenRepository: DropTokenRepository,
+        private val moveRepository: MoveRepository
+) {
+    fun allIds(): List<Long> = dropTokenRepository.findAll().map { it.id }
 
-    fun create(players: List<String>): Long = repository.save(DropToken.new(players)).id
+    fun create(players: List<String>): Long = dropTokenRepository.save(DropToken.new(players)).id
 
-    fun get(id: Long): GameState? = repository.findByIdOrNull(id)?.let {
+    fun get(id: Long): GameState? = dropTokenRepository.findByIdOrNull(id)?.let {
         GameState(
                 players = it.originalPlayers,
                 state = when (it.state) {
@@ -22,14 +25,14 @@ class DropTokenService(private val repository: DropTokenRepository) {
         )
     }
 
-    fun move(id: Long, player: String, column: Int): MoveResult {
+    fun newMove(id: Long, player: String, column: Int): MoveResult {
         // out of bounds
         if (column < 0 || column > 3) {
             return MoveResult.IllegalMove
         }
 
         // check game exists
-        val dropToken = when (val dropToken = repository.findByIdOrNull(id)) {
+        val dropToken = when (val dropToken = dropTokenRepository.findByIdOrNull(id)) {
             null -> return MoveResult.None
             else -> dropToken
         }
@@ -57,8 +60,8 @@ class DropTokenService(private val repository: DropTokenRepository) {
             return MoveResult.IllegalMove
         }
 
-        val move = Move(
-                type = Move.MoveType.MOVE,
+        val move = nrxus.droptoken.persistence.Move(
+                type = nrxus.droptoken.persistence.Move.MoveType.MOVE,
                 player = player,
                 column = column,
                 number = dropToken.moves.size,
@@ -76,10 +79,18 @@ class DropTokenService(private val repository: DropTokenRepository) {
             }
         }
 
-        repository.save(dropToken)
+        dropTokenRepository.save(dropToken)
 
         return MoveResult.Success(dropToken.moves.size - 1)
     }
+
+    fun getMove(id: Long, move: Int): Move? = moveRepository
+            .findByNumberAndDropTokenId(move, id)?.let {
+                Move(player = it.player, type = when (it.type) {
+                    nrxus.droptoken.persistence.Move.MoveType.QUIT -> Move.Type.Quit()
+                    nrxus.droptoken.persistence.Move.MoveType.MOVE -> Move.Type.Move(it.column!!)
+                })
+            }
 }
 
 sealed class MoveResult {

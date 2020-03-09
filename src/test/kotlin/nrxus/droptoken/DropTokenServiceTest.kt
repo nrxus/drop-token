@@ -6,6 +6,7 @@ import io.mockk.verify
 import nrxus.droptoken.persistence.DropToken
 import nrxus.droptoken.persistence.DropTokenRepository
 import nrxus.droptoken.persistence.Move
+import nrxus.droptoken.persistence.MoveRepository
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -13,20 +14,22 @@ import org.junit.jupiter.api.fail
 import org.springframework.data.repository.findByIdOrNull
 
 internal class DropTokenServiceTest {
-    private lateinit var repository: DropTokenRepository
+    private lateinit var dropTokenRepository: DropTokenRepository
+    private lateinit var moveRepository: MoveRepository
     private lateinit var subject: DropTokenService
 
 
     @BeforeEach
     fun setup() {
-        repository = mockk()
-        subject = DropTokenService(repository)
+        dropTokenRepository = mockk()
+        moveRepository = mockk()
+        subject = DropTokenService(dropTokenRepository, moveRepository)
     }
 
     @Test
     fun `allIds returns the id of all the games`() {
         val dropTokens = listOf(dropToken(id = 3), dropToken(id = 5))
-        every { repository.findAll() } returns dropTokens
+        every { dropTokenRepository.findAll() } returns dropTokens
 
         val ids = subject.allIds()
 
@@ -36,14 +39,14 @@ internal class DropTokenServiceTest {
     @Test
     fun `create saves a new game and returns its id`() {
         val dropToken = dropToken()
-        every { repository.save(any<DropToken>()) } returns dropToken
+        every { dropTokenRepository.save(any<DropToken>()) } returns dropToken
 
         val players = listOf("player1", "player2")
         val id = subject.create(players)
 
         assertThat(id).isEqualTo(dropToken.id)
         verify(exactly = 1) {
-            repository.save<DropToken>(match {
+            dropTokenRepository.save<DropToken>(match {
                 it.currentPlayers == players &&
                         it.originalPlayers == players &&
                         it.state == DropToken.State.IN_PROGRESS &&
@@ -56,7 +59,7 @@ internal class DropTokenServiceTest {
 
     @Test
     fun `get returns the state of a game in progress`() {
-        every { repository.findByIdOrNull(3) } returns dropToken(
+        every { dropTokenRepository.findByIdOrNull(3) } returns dropToken(
                 original_players = listOf("alice", "bob"),
                 state = DropToken.State.IN_PROGRESS
         )
@@ -73,7 +76,7 @@ internal class DropTokenServiceTest {
 
     @Test
     fun `get returns the state of a game tied`() {
-        every { repository.findByIdOrNull(5) } returns dropToken(
+        every { dropTokenRepository.findByIdOrNull(5) } returns dropToken(
                 original_players = listOf("dan", "charlie"),
                 state = DropToken.State.DONE,
                 winner = null
@@ -91,7 +94,7 @@ internal class DropTokenServiceTest {
 
     @Test
     fun `get returns the state of a game with a winner`() {
-        every { repository.findByIdOrNull(10) } returns dropToken(
+        every { dropTokenRepository.findByIdOrNull(10) } returns dropToken(
                 original_players = listOf("bob", "alice"),
                 current_players = mutableListOf("bob"),
                 state = DropToken.State.DONE,
@@ -110,7 +113,7 @@ internal class DropTokenServiceTest {
 
     @Test
     fun `get returns null for a non existing game`() {
-        every { repository.findByIdOrNull(any()) } returns null
+        every { dropTokenRepository.findByIdOrNull(any()) } returns null
 
         val gameState = subject.get(10)
 
@@ -128,16 +131,16 @@ internal class DropTokenServiceTest {
 
         dropToken.moves.add(Move(Move.MoveType.MOVE, "dan", 0, 0, dropToken))
 
-        every { repository.findByIdOrNull(2) } returns dropToken
-        every { repository.save(any<DropToken>()) } returns dropToken
+        every { dropTokenRepository.findByIdOrNull(2) } returns dropToken
+        every { dropTokenRepository.save(any<DropToken>()) } returns dropToken
 
-        when (val result = subject.move(2, "charlie", 2)) {
+        when (val result = subject.newMove(2, "charlie", 2)) {
             is MoveResult.Success -> assertThat(result.moveNumber).isEqualTo(1)
             else -> fail("expected a MoveResult.OutOfTurn")
         }
 
         verify(exactly = 1) {
-            repository.save<DropToken>(match {
+            dropTokenRepository.save<DropToken>(match {
                 it.turn == 0
                         && it.tokens == listOf(0, -1, 1) &&
                         it.moves.size == 2 &&
@@ -162,16 +165,16 @@ internal class DropTokenServiceTest {
                         -1, -1, -1
                 )
         )
-        every { repository.findByIdOrNull(2) } returns dropToken
-        every { repository.save(any<DropToken>()) } returns dropToken
+        every { dropTokenRepository.findByIdOrNull(2) } returns dropToken
+        every { dropTokenRepository.save(any<DropToken>()) } returns dropToken
 
-        when (subject.move(2, "alice", 3)) {
+        when (subject.newMove(2, "alice", 3)) {
             is MoveResult.Success -> Unit
             else -> fail("expected a MoveResult.Success")
         }
 
         verify(exactly = 1) {
-            repository.save<DropToken>(match {
+            dropTokenRepository.save<DropToken>(match {
                 it.state == DropToken.State.DONE && it.winner == "alice"
             })
         }
@@ -189,16 +192,16 @@ internal class DropTokenServiceTest {
                         -1, 0, 0, 0
                 )
         )
-        every { repository.findByIdOrNull(2) } returns dropToken
-        every { repository.save(any<DropToken>()) } returns dropToken
+        every { dropTokenRepository.findByIdOrNull(2) } returns dropToken
+        every { dropTokenRepository.save(any<DropToken>()) } returns dropToken
 
-        when (subject.move(2, "dan", 0)) {
+        when (subject.newMove(2, "dan", 0)) {
             is MoveResult.Success -> Unit
             else -> fail("expected a MoveResult.Success")
         }
 
         verify(exactly = 1) {
-            repository.save<DropToken>(match {
+            dropTokenRepository.save<DropToken>(match {
                 it.state == DropToken.State.DONE && it.winner == null
             })
         }
@@ -206,24 +209,24 @@ internal class DropTokenServiceTest {
 
     @Test
     fun `move is invalid if game is done`() {
-        every { repository.findByIdOrNull(2) } returns dropToken(
+        every { dropTokenRepository.findByIdOrNull(2) } returns dropToken(
                 current_players = mutableListOf("bob", "charlie"),
                 turn = 0,
                 state = DropToken.State.DONE
         )
 
         // columns already full
-        when (subject.move(2, "bob", 0)) {
+        when (subject.newMove(2, "bob", 0)) {
             is MoveResult.IllegalMove -> Unit
             else -> fail("expected a MoveResult.IllegalMove")
         }
 
-        verify(exactly = 0) { repository.save(any<DropToken>()) }
+        verify(exactly = 0) { dropTokenRepository.save(any<DropToken>()) }
     }
 
     @Test
     fun `move checks invalid moves`() {
-        every { repository.findByIdOrNull(2) } returns dropToken(
+        every { dropTokenRepository.findByIdOrNull(2) } returns dropToken(
                 current_players = mutableListOf("bob", "charlie"),
                 turn = 0,
                 tokens = mutableListOf(0, -1, -1, -1,
@@ -233,65 +236,111 @@ internal class DropTokenServiceTest {
         )
 
         // column number too high
-        when (subject.move(2, "bob", 4)) {
+        when (subject.newMove(2, "bob", 4)) {
             is MoveResult.IllegalMove -> Unit
             else -> fail("expected a MoveResult.IllegalMove")
         }
 
         // column number too low
-        when (subject.move(2, "bob", -1)) {
+        when (subject.newMove(2, "bob", -1)) {
             is MoveResult.IllegalMove -> Unit
             else -> fail("expected a MoveResult.IllegalMove")
         }
 
         // columns already full
-        when (subject.move(2, "bob", 0)) {
+        when (subject.newMove(2, "bob", 0)) {
             is MoveResult.IllegalMove -> Unit
             else -> fail("expected a MoveResult.IllegalMove")
         }
 
-        verify(exactly = 0) { repository.save(any<DropToken>()) }
+        verify(exactly = 0) { dropTokenRepository.save(any<DropToken>()) }
     }
 
     @Test
     fun `move does not allow for out of order turns`() {
-        every { repository.findByIdOrNull(10) } returns dropToken(
+        every { dropTokenRepository.findByIdOrNull(10) } returns dropToken(
                 current_players = mutableListOf("alice", "charlie"),
                 turn = 1
         )
 
-        when (subject.move(10, "alice", 3)) {
+        when (subject.newMove(10, "alice", 3)) {
             is MoveResult.OutOfTurn -> Unit
             else -> fail("expected a MoveResult.OutOfTurn")
         }
 
-        verify(exactly = 0) { repository.save(any<DropToken>()) }
+        verify(exactly = 0) { dropTokenRepository.save(any<DropToken>()) }
     }
 
     @Test
     fun `move checks the game exists`() {
-        every { repository.findByIdOrNull(5) } returns null
+        every { dropTokenRepository.findByIdOrNull(5) } returns null
 
-        when (subject.move(5, "bob", 3)) {
+        when (subject.newMove(5, "bob", 3)) {
             is MoveResult.None -> Unit
             else -> fail("expected a MoveResult.None")
         }
 
-        verify(exactly = 0) { repository.save(any<DropToken>()) }
+        verify(exactly = 0) { dropTokenRepository.save(any<DropToken>()) }
     }
 
     @Test
     fun `move checks the player exists in that game`() {
-        every { repository.findByIdOrNull(5) } returns dropToken(
+        every { dropTokenRepository.findByIdOrNull(5) } returns dropToken(
                 current_players = mutableListOf("alice", "charlie")
         )
 
-        when (subject.move(5, "bob", 3)) {
+        when (subject.newMove(5, "bob", 3)) {
             is MoveResult.None -> Unit
             else -> fail("expected a MoveResult.None")
         }
 
-        verify(exactly = 0) { repository.save(any<DropToken>()) }
+        verify(exactly = 0) { dropTokenRepository.save(any<DropToken>()) }
+    }
+
+    @Test
+    fun `getMove converts move type`() {
+        every { moveRepository.findByNumberAndDropTokenId(3, 6) } returns Move(
+                type = Move.MoveType.MOVE,
+                player = "alice",
+                column = 3,
+                number = 3,
+                dropToken = DropToken.new(listOf("alice", "bob"))
+        )
+
+        val move = subject.getMove(6, 3)
+
+        assertThat(move?.player).isEqualTo("alice")
+
+        when (val type = move?.type) {
+            is nrxus.droptoken.Move.Type.Move -> assertThat(type.column)
+            else -> fail("expected a Move type")
+        }
+    }
+
+    @Test
+    fun `getMove converts quit type`() {
+        every { moveRepository.findByNumberAndDropTokenId(6, 2) } returns Move(
+                type = Move.MoveType.QUIT,
+                player = "bob",
+                number = 2,
+                column = null,
+                dropToken = DropToken.new(listOf("alice", "bob"))
+        )
+
+        val move = subject.getMove(2, 6)
+
+        assertThat(move?.player).isEqualTo("bob")
+
+        when (move?.type) {
+            is nrxus.droptoken.Move.Type.Quit -> Unit
+            else -> fail("expected a Quit type")
+        }
+    }
+
+    @Test
+    fun `move returns null not found`() {
+        every { moveRepository.findByNumberAndDropTokenId(3, 6) } returns null
+        assertThat(subject.getMove(6, 3)).isNull()
     }
 
     // creates a default DropToken for testing

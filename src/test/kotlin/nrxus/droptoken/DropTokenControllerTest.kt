@@ -150,7 +150,7 @@ internal class DropTokenControllerTest(@Autowired val mockMvc: MockMvc) {
             |"column": 2
             |}""".trimMargin()
 
-        every { service.move(any(), any(), any()) } returns
+        every { service.newMove(any(), any(), any()) } returns
                 MoveResult.Success(moveNumber = 10)
 
         val response = mockMvc
@@ -171,7 +171,7 @@ internal class DropTokenControllerTest(@Autowired val mockMvc: MockMvc) {
             |}""".trimMargin()
 
         JSONAssert.assertEquals(expected, response, JSONCompareMode.NON_EXTENSIBLE)
-        verify(exactly = 1) { service.move(id = 5, player = "dan", column = 2) }
+        verify(exactly = 1) { service.newMove(id = 5, player = "dan", column = 2) }
     }
 
     @Test
@@ -180,7 +180,7 @@ internal class DropTokenControllerTest(@Autowired val mockMvc: MockMvc) {
             |"column": 2
             |}""".trimMargin()
 
-        every { service.move(any(), any(), any()) } returns MoveResult.None
+        every { service.newMove(any(), any(), any()) } returns MoveResult.None
 
         mockMvc
                 .perform(
@@ -198,7 +198,7 @@ internal class DropTokenControllerTest(@Autowired val mockMvc: MockMvc) {
             |"column": 2
             |}""".trimMargin()
 
-        every { service.move(any(), any(), any()) } returns MoveResult.IllegalMove
+        every { service.newMove(any(), any(), any()) } returns MoveResult.IllegalMove
 
         mockMvc
                 .perform(
@@ -217,7 +217,7 @@ internal class DropTokenControllerTest(@Autowired val mockMvc: MockMvc) {
             |"column": 2
             |}""".trimMargin()
 
-        every { service.move(any(), any(), any()) } returns MoveResult.OutOfTurn
+        every { service.newMove(any(), any(), any()) } returns MoveResult.OutOfTurn
 
         mockMvc
                 .perform(
@@ -228,5 +228,61 @@ internal class DropTokenControllerTest(@Autowired val mockMvc: MockMvc) {
                 )
                 .andExpect(status().isConflict)
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+    }
+
+    @Test
+    fun `GET #drop_token#{gameId}#moves#{moveNumber}`() {
+        every { service.getMove(id = 3, move = 5) } returns Move(
+                type = Move.Type.Move(2),
+                player = "player1"
+        )
+
+        val response = mockMvc.perform(get("/drop_token/3/moves/5")
+                .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk)
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andReturn()
+                .response
+                .contentAsString
+
+        val actual = """{
+            |"type": "MOVE",
+            |"player": "player1",
+            |"column": 2
+            |}""".trimMargin()
+
+        JSONAssert.assertEquals(actual, response, JSONCompareMode.NON_EXTENSIBLE)
+    }
+
+    @Test
+    fun `GET #drop_token#{gameId}#moves#{moveNumber} Quit`() {
+        every { service.getMove(id = 3, move = 5) } returns Move(
+                type = Move.Type.Quit(),
+                player = "player2"
+        )
+
+        val response = mockMvc.perform(get("/drop_token/3/moves/5")
+                .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk)
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andReturn()
+                .response
+                .contentAsString
+
+        val actual = """{
+            |"type": "QUIT",
+            |"player": "player2"
+            |}""".trimMargin()
+
+        JSONAssert.assertEquals(actual, response, JSONCompareMode.NON_EXTENSIBLE)
+    }
+
+    @Test
+    fun `GET #drop_token#{gameId}#moves#{moveNumber} not found`() {
+        every { service.getMove(id = 3, move = 5) } returns null
+
+        mockMvc.perform(get("/drop_token/3/moves/5")
+                .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isNotFound)
     }
 }
