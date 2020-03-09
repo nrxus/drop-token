@@ -49,9 +49,8 @@ internal class DropTokenControllerTest(@Autowired val mockMvc: MockMvc) {
             |"rows":4
             |}""".trimMargin()
 
-
         val id = 3L
-        every { service.create(any(), any()) } returns id
+        every { service.create(any()) } returns id
 
         val response = mockMvc
                 .perform(
@@ -71,7 +70,7 @@ internal class DropTokenControllerTest(@Autowired val mockMvc: MockMvc) {
             |}""".trimMargin()
 
         JSONAssert.assertEquals(expected, response, JSONCompareMode.NON_EXTENSIBLE)
-        verify(exactly = 1) { service.create("player1", "player2") }
+        verify(exactly = 1) { service.create(listOf("player1", "player2")) }
     }
 
     @Test
@@ -143,5 +142,91 @@ internal class DropTokenControllerTest(@Autowired val mockMvc: MockMvc) {
         mockMvc.perform(get("/drop_token/2")
                 .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isNotFound)
+    }
+
+    @Test
+    fun `POST #drop_token#{gameId}#{playerId}`() {
+        val body = """{
+            |"column": 2
+            |}""".trimMargin()
+
+        every { service.move(any(), any(), any()) } returns
+                MoveResult.Success(moveNumber = 10)
+
+        val response = mockMvc
+                .perform(
+                        post("/drop_token/5/dan")
+                                .accept(MediaType.APPLICATION_JSON)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
+                )
+                .andExpect(status().isOk)
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andReturn()
+                .response
+                .contentAsString
+
+        val expected = """{
+            |"move": "${5}/moves/${10}"
+            |}""".trimMargin()
+
+        JSONAssert.assertEquals(expected, response, JSONCompareMode.NON_EXTENSIBLE)
+        verify(exactly = 1) { service.move(id = 5, player = "dan", column = 2) }
+    }
+
+    @Test
+    fun `POST #drop_token#{gameId}#{playerId} not found`() {
+        val body = """{
+            |"column": 2
+            |}""".trimMargin()
+
+        every { service.move(any(), any(), any()) } returns MoveResult.None
+
+        mockMvc
+                .perform(
+                        post("/drop_token/5/dan")
+                                .accept(MediaType.APPLICATION_JSON)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
+                )
+                .andExpect(status().isNotFound)
+    }
+
+    @Test
+    fun `POST #drop_token#{gameId}#{playerId} illegal move`() {
+        val body = """{
+            |"column": 2
+            |}""".trimMargin()
+
+        every { service.move(any(), any(), any()) } returns MoveResult.IllegalMove
+
+        mockMvc
+                .perform(
+                        post("/drop_token/5/dan")
+                                .accept(MediaType.APPLICATION_JSON)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
+                )
+                .andExpect(status().isBadRequest)
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+    }
+
+    @Test
+    fun `POST #drop_token#{gameId}#{playerId} out of turn`() {
+        val body = """{
+            |"column": 2
+            |}""".trimMargin()
+
+        every { service.move(any(), any(), any()) } returns MoveResult.OutOfTurn
+
+        mockMvc
+                .perform(
+                        post("/drop_token/5/dan")
+                                .accept(MediaType.APPLICATION_JSON)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
+                )
+                .andExpect(status().isConflict)
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
     }
 }
